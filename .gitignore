@@ -6,6 +6,11 @@ __pycache__/
 # C extensions
 *.so
 
+# Other files
+W_bomd_500_supercell.csv
+mlip_data.cfg
+W_bomd_500_supercell.cfg
+
 # Distribution / packaging
 .Python
 build/

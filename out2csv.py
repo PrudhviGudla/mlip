@@ -3,6 +3,11 @@ import numpy as np
 import pandas as pd
 import os
 import argparse
+import sys
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 def parse_arguments():
     """Parse command line arguments for input and output file paths."""
@@ -10,7 +15,7 @@ def parse_arguments():
     
     # Required argument for input file
     parser.add_argument('-i', '--input', 
-                        default=r"C:\Users\prudh\Downloads\bomd_500K\bomd_500K\W_bomd_500_supercell.out",
+                        default=os.getenv('OUT_DEFAULT_INPUT', ''),
                         help='Path to the input QE output file')
     
     # Optional argument for output file (defaults to input filename with .csv extension)
@@ -33,14 +38,18 @@ def parse_qe_output(filename):
         content = f.read()
 
     data = []
-    iterations = re.split(r'Self-consistent Calculation', content)[1:3]
+    iterations = re.split(r'Self-consistent Calculation', content)
+    ini_data = iterations[0]
+    iterations = iterations[1:11]
     print("The number of iterations in the simulation : ", len(iterations), "\n")
     
+    natoms_raw = re.search(r'number of atoms/cell\s+=\s+(\d+)', ini_data)
+    natoms = int(natoms_raw.group(1)) if natoms_raw else None
     for i in range(0, len(iterations)):
         it_num = i+1
         it_content = iterations[i] 
         it_data = {'iteration': it_num}
-        
+        it_data['number_of_atoms'] = natoms
         # Extract time-----------------------------------------------------
         time_match = re.search(r'time =\s+([\d.]+)\s+pico-seconds', it_content)
         it_data['time'] = float(time_match.group(1)) if time_match else 0.0
@@ -56,7 +65,8 @@ def parse_qe_output(filename):
             for line in force_section.group(0).split('\n'):
                 if line.strip().startswith('atom'):
                     parts = line.split('=')[1].strip().split()
-                    forces.append([float(x) for x in parts])
+                    atom_type = line.split('=')[0].split()[3]
+                    forces.append([atom_type]+[float(x) for x in parts])
         it_data['forces'] = forces
 
         # Extract stress ---------------------------------------------------------------------------------------------------
