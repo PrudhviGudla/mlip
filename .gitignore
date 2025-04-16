@@ -10,6 +10,14 @@ __pycache__/
 W_bomd_500_supercell.csv
 mlip_data.cfg
 W_bomd_500_supercell.cfg
+test.almtp
+pot.almtp
+cfg_data/
+csv_data/
+out_data/
+output_mtp_files/
+check_nan/
+nan_csv_data/
 
 # Distribution / packaging
 .Python

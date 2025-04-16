@@ -40,7 +40,7 @@ def parse_qe_output(filename):
     data = []
     iterations = re.split(r'Self-consistent Calculation', content)
     ini_data = iterations[0]
-    iterations = iterations[1:11]
+    iterations = iterations[1:]
     print("The number of iterations in the simulation : ", len(iterations), "\n")
     
     natoms_raw = re.search(r'number of atoms/cell\s+=\s+(\d+)', ini_data)

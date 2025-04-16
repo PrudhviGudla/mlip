@@ -98,6 +98,16 @@ def main():
 
     # Load the data from the CSV file
     df = pd.read_csv(args.input)
+
+    # Remove rows with NaN values
+    initial_row_count = len(df)
+    df = df.dropna()
+    final_row_count = len(df)
+
+    if initial_row_count > final_row_count:
+        print(f"Removed {initial_row_count - final_row_count} rows with NaN values.")
+
+    # Create the CFG file
     create_cfg_file(df, args.output, args.mode)
     print(f"Data extracted and saved to {args.output}")
 
