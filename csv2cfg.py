@@ -22,13 +22,20 @@ def parse_arguments():
                         default=os.getenv('CSV_DEFAULT_INPUT', 'W_bomd_500_supercell.csv'),
                         help='Path to the input QE output file')
     
-    # Optional argument for output file (defaults to input filename with .csv extension)
+    # Optional argument for output file (defaults to input filename with .cfg extension)
     parser.add_argument('-o', '--output', 
-                        help='Path for the output CSV file (default: input_filename.csv)')
+                        help='Path for the output CFG file (default: input_filename.cfg)')
     
     parser.add_argument('-m', '--mode',
-                        default = 'w',
-                        help='mode of writing: "a" for append, "w" for overwrite (default: w)')
+                        default='w',
+                        help='Mode of writing: "a" for append, "w" for overwrite (default: w)')
+    
+    # Optional arguments for selecting a range of rows
+    parser.add_argument('--start', type=int, default=0,
+                        help='Starting index of rows to consider (default: 0)')
+    parser.add_argument('--end', type=int, default=None,
+                        help='Ending index of rows to consider (default: None, meaning all rows)')
+
     # Parse the arguments 
     args = parser.parse_args()
     
@@ -87,8 +94,9 @@ def main():
         print(f"Error: Input file '{args.input}' does not exist.")
         sys.exit(1)
 
-    if type(args.mode) != str and args.mode != 'a' and args.mode != 'w':
+    if type(args.mode) != str and args.mode not in ['a', 'w']:
         print(f"Error: Mode '{args.mode}' cannot be implemented")
+        sys.exit(1)
     
     print(f"Processing input file: {args.input}")
     if args.mode == 'a':
@@ -106,6 +114,10 @@ def main():
 
     if initial_row_count > final_row_count:
         print(f"Removed {initial_row_count - final_row_count} rows with NaN values.")
+
+    # Filter rows based on the start and end indices
+    df = df.iloc[args.start:args.end]
+    print(f"Selected rows from index {args.start} to {args.end if args.end else 'end'}.")
 
     # Create the CFG file
     create_cfg_file(df, args.output, args.mode)

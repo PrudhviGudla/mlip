@@ -46,19 +46,20 @@ def parse_qe_output(filename):
     natoms_raw = re.search(r'number of atoms/cell\s+=\s+(\d+)', ini_data)
     natoms = int(natoms_raw.group(1)) if natoms_raw else None
     for i in range(0, len(iterations)):
-        it_num = i+1
+        it_num = i + 1
         it_content = iterations[i] 
         it_data = {'iteration': it_num}
         it_data['number_of_atoms'] = natoms
-        # Extract time-----------------------------------------------------
+
+        # Extract time
         time_match = re.search(r'time =\s+([\d.]+)\s+pico-seconds', it_content)
         it_data['time'] = float(time_match.group(1)) if time_match else 0.0
         
-        # Extract total energy-----------------------------------------------------------
+        # Extract total energy
         energy_match = re.search(r'!    total energy\s+=\s+([\d.-]+)\s+Ry', it_content)
         it_data['total_energy'] = float(energy_match.group(1)) if energy_match else None
         
-        # Extract forces-------------------------------------------------------------------------------
+        # Extract forces
         forces = []
         force_section = re.search(r'Forces acting on atoms.*\n(.*?)\n\s*The non-local contrib', it_content, re.DOTALL)
         if force_section:
@@ -66,32 +67,35 @@ def parse_qe_output(filename):
                 if line.strip().startswith('atom'):
                     parts = line.split('=')[1].strip().split()
                     atom_type = line.split('=')[0].split()[3]
-                    forces.append([atom_type]+[float(x) for x in parts])
+                    forces.append([atom_type] + [float(x) for x in parts])
         it_data['forces'] = forces
 
-        # Extract stress ---------------------------------------------------------------------------------------------------
-        stress_pattern = r'total\s+stress\s+\(Ry/bohr\*\*3\)\s+\(kbar\)\s+P=\s+[\d.]+\n(.*?)\n(.*?)\n(.*?)\n'
-        stress_match = re.search(stress_pattern, content, re.DOTALL)
+        # Extract stress
+        stress_pattern = r'total\s+stress\s+\(Ry/bohr\*\*3\)\s+\(kbar\)\s+P=\s+[-\d.]+\n((?:\s+[-\d.eE]+\s+[-\d.eE]+\s+[-\d.eE]+\s+[-\d.eE]+\s+[-\d.eE]+\s+[-\d.eE]+\n){3})'
+        stress_match = re.search(stress_pattern, it_content, re.DOTALL)
 
-        # Extract the three lines containing stress values
-        lines = [stress_match.group(1), stress_match.group(2), stress_match.group(3)]
-
-        # Parse each line to extract the kbar values (last three values in each line)
-        stress_tensor = []
-        for line in lines:
-            values = line.split()
-            # Get the last three values which are the kbar components
-            kbar_values = [float(values[-3]), float(values[-2]), float(values[-1])]
-            stress_tensor.append(kbar_values)
-        it_data['stress'] = stress_tensor
+        if stress_match:
+            # Extract the three lines containing stress values
+            stress_block = stress_match.group(1).strip().split('\n')
+            stress_tensor = []
+            for line in stress_block:
+                values = line.split()
+                # Get the last three values which are the kbar components
+                kbar_values = [float(values[-3]), float(values[-2]), float(values[-1])]
+                stress_tensor.append(kbar_values)
+            it_data['stress'] = stress_tensor
+            # print(f"Stress tensor for iteration {it_num}: {stress_tensor}")
+        else:
+            print(f"Warning: Stress data not found for iteration {it_num}.")
+            it_data['stress'] = None
         
-        # Extract Ekin and Etot-----------------------------------------------------------------------------------
+        # Extract Ekin and Etot
         ekin_match = re.search(r'Ekin\s+=\s+([\d.]+)\s+Ry', it_content)
         etot_match = re.search(r'Etot\s+=\s+([\d.-]+)', it_content)
         it_data['Ekin'] = float(ekin_match.group(1)) if ekin_match else None
         it_data['Etot'] = float(etot_match.group(1)) if etot_match else None
         
-        # Extract cell parameters----------------------------------------------------------------------
+        # Extract cell parameters
         cell_params = []
         cell_section = re.search(r'CELL_PARAMETERS \(angstrom\)(.*?)\n\n', it_content, re.DOTALL)
         if cell_section:
@@ -100,7 +104,7 @@ def parse_qe_output(filename):
                     cell_params.append([float(x) for x in line.split()])
         it_data['cell_parameters'] = cell_params
         
-        # Extract atomic positions----------------------------------------------------------------------------
+        # Extract atomic positions
         atomic_pos = []
         pos_section = re.search(r'ATOMIC_POSITIONS \(crystal\)(.*?)\n\n', it_content, re.DOTALL)
         if pos_section:
@@ -110,7 +114,7 @@ def parse_qe_output(filename):
                     atomic_pos.append([parts[0]] + [float(x) for x in parts[1:4]])
         it_data['atomic_positions'] = atomic_pos
         
-        # Calculate Cartesian coordinates--------------------------------------------------------------------------
+        # Calculate Cartesian coordinates
         if cell_params and atomic_pos:
             cell_matrix = np.array(cell_params)
             cart_pos = []
@@ -143,13 +147,22 @@ def main():
     # Convert to pandas DataFrame
     df = pd.DataFrame(output_data)
 
+    # Count and remove rows with None stress values
+    initial_rows = len(df)
+    df = df[df['stress'].notna()]
+    rows_removed = initial_rows - len(df)
+    print(f"\nRemoved {rows_removed} rows with missing stress data")
+    print(f"Remaining rows: {len(df)}\n")
+
     # Expand nested lists into separate columns
-    df = pd.concat([df.drop(['forces', 'stress', 'cell_parameters', 'atomic_positions', 'cartesian_positions'], axis=1),
-                    df['forces'].apply(pd.Series).add_prefix('force_'),
-                    pd.DataFrame(df['stress'].tolist(), columns=['stress_xx', 'stress_yy', 'stress_zz']),
-                    pd.DataFrame(df['cell_parameters'].tolist(), columns=['cell_a', 'cell_b', 'cell_c']),
-                    df['atomic_positions'].apply(pd.Series).add_prefix('atom_pos_'),
-                    df['cartesian_positions'].apply(pd.Series).add_prefix('cart_pos_')], axis=1)
+    df = pd.concat([
+        df.drop(['forces', 'stress', 'cell_parameters', 'atomic_positions', 'cartesian_positions'], axis=1),
+        df['forces'].apply(pd.Series).add_prefix('force_'),
+        pd.DataFrame(df['stress'].tolist(), columns=['stress_xx', 'stress_yy', 'stress_zz']),
+        pd.DataFrame(df['cell_parameters'].tolist(), columns=['cell_a', 'cell_b', 'cell_c']),
+        df['atomic_positions'].apply(pd.Series).add_prefix('atom_pos_'),
+        df['cartesian_positions'].apply(pd.Series).add_prefix('cart_pos_')
+    ], axis=1)
 
     num_columns = len(df.columns)
     column_names = df.columns.tolist()
